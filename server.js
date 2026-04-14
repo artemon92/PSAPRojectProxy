@@ -115,6 +115,70 @@ app.get('/api/jira/myself', async (req, res) => {
   }
 });
 
+// Proxy endpoint genérico para JIRA - DEBE IR DESPUÉS de los endpoints específicos
+app.all('/api/jira/*', async (req, res) => {
+  try {
+    // Obtener URL de JIRA de los headers o query params
+    const jiraBaseUrl = req.headers['x-jira-url'] || req.query.jiraUrl;
+    const email = req.headers['x-jira-email'] || req.query.email;
+    const token = req.headers['x-jira-token'] || req.query.token;
+    
+    if (!jiraBaseUrl || !email || !token) {
+      return res.status(400).json({
+        error: 'Missing credentials',
+        message: 'Required: x-jira-url, x-jira-email, x-jira-token headers'
+      });
+    }
+    
+    // Construir URL de JIRA
+    const jiraPath = req.params[0];
+    const jiraUrl = `${jiraBaseUrl}/rest/api/3/${jiraPath}`;
+    
+    // Preparar headers de autenticación
+    const auth = Buffer.from(`${email}:${token}`).toString('base64');
+    
+    const fetchOptions = {
+      method: req.method,
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    };
+    
+    // Agregar body si es POST/PUT
+    if (req.method === 'POST' || req.method === 'PUT') {
+      fetchOptions.body = JSON.stringify(req.body);
+    }
+    
+    console.log(`Proxying ${req.method} ${jiraUrl}`);
+    
+    // Hacer petición a JIRA
+    const jiraResponse = await fetch(jiraUrl, fetchOptions);
+    
+    // Obtener respuesta
+    const responseBody = await jiraResponse.text();
+    
+    // Devolver respuesta al cliente
+    res.status(jiraResponse.status);
+    
+    // Parsear JSON si es posible
+    try {
+      const jsonData = JSON.parse(responseBody);
+      res.json(jsonData);
+    } catch {
+      res.send(responseBody);
+    }
+    
+  } catch (error) {
+    console.error('Proxy error:', error);
+    res.status(500).json({
+      error: 'Proxy error',
+      message: error.message
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`JIRA Proxy Server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/`);
