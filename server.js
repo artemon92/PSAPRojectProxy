@@ -97,8 +97,8 @@ app.all('/api/jira/*', async (req, res) => {
   }
 });
 
-// Endpoint específico para search
-app.post('/api/jira/search', async (req, res) => {
+// Endpoint específico para search - usa GET /search/jql (nuevo endpoint)
+app.get('/api/jira/search', async (req, res) => {
   try {
     const jiraBaseUrl = req.headers['x-jira-url'] || req.query.jiraUrl;
     const email = req.headers['x-jira-email'] || req.query.email;
@@ -111,19 +111,27 @@ app.post('/api/jira/search', async (req, res) => {
       });
     }
     
-    const jiraUrl = `${jiraBaseUrl}/rest/api/3/search`;
+    // Extraer parámetros de query
+    const { jql, fields, maxResults, startAt } = req.query;
+    
+    // Construir URL con query params (nuevo formato JIRA)
+    const queryParams = new URLSearchParams();
+    if (jql) queryParams.append('jql', jql);
+    if (fields) queryParams.append('fields', fields);
+    if (maxResults) queryParams.append('maxResults', maxResults);
+    if (startAt) queryParams.append('startAt', startAt);
+    
+    const jiraUrl = `${jiraBaseUrl}/rest/api/3/search/jql?${queryParams.toString()}`;
     const auth = Buffer.from(`${email}:${token}`).toString('base64');
     
-    console.log('Proxying POST /search', req.body);
+    console.log('Proxying GET /search/jql', jql);
     
     const jiraResponse = await fetch(jiraUrl, {
-      method: 'POST',
+      method: 'GET',
       headers: {
         'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/json',
         'Accept': 'application/json'
-      },
-      body: JSON.stringify(req.body)
+      }
     });
     
     const data = await jiraResponse.json();
